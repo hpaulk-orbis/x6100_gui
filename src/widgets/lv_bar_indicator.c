@@ -312,6 +312,9 @@ static void lv_bar_indicator_event(const lv_obj_class_t *class_p, lv_event_t *e)
         }
 
         if (bar->tick_count > 0 && bar->tick_sizes && bar->tick_labels) {
+            /* Scale labels take the meter's text color, so they stay readable on a light card */
+            lv_draw_label_dsc_t label_dsc = bar->label_dsc_tmpl;
+            label_dsc.color = lv_obj_get_style_text_color(obj, LV_PART_MAIN);
             // calculate tick position
             area.y1 = y1 + (barh - bar->tick_sizes[0].y) / 2;
             area.y2 = area.y1 + bar->tick_sizes[0].y;
@@ -319,7 +322,7 @@ static void lv_bar_indicator_event(const lv_obj_class_t *class_p, lv_event_t *e)
                 lv_coord_t offset = (bar->tick_vals[i] - bar->range_min) * slice_w / bar->slice_step + 0.5f;
                 area.x1 = x1 + offset - bar->tick_sizes[i].x / 2 + 1;
                 area.x2 = area.x1 + bar->tick_sizes[i].x;
-                lv_draw_label(draw_ctx, &bar->label_dsc_tmpl, &area, bar->tick_labels[i], NULL);
+                lv_draw_label(draw_ctx, &label_dsc, &area, bar->tick_labels[i], NULL);
             }
         }
     }

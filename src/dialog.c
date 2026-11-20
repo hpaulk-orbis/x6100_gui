@@ -97,11 +97,10 @@ void dialog_item(dialog_t *dialog, lv_obj_t *obj) {
 
     lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, LV_PART_CURSOR);
     lv_obj_add_style(obj, &style.text_base_color, LV_PART_CURSOR);
-    lv_obj_set_style_text_color(obj, lv_color_black(), LV_PART_CURSOR | LV_STATE_FOCUSED);
+    lv_obj_add_style(obj, &style.dialog.cursor_focus, LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_obj_set_style_bg_opa(obj, 128, LV_PART_CURSOR | LV_STATE_EDITED);
 
-    lv_obj_set_style_border_width(obj, 2, LV_STATE_FOCUS_KEY | LV_PART_INDICATOR);
-    lv_obj_set_style_border_color(obj, lv_color_white(), LV_STATE_FOCUS_KEY | LV_PART_INDICATOR);
+    lv_obj_add_style(obj, &style.dialog.indicator_focus, LV_STATE_FOCUS_KEY | LV_PART_INDICATOR);
 
     lv_obj_add_flag(obj, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 

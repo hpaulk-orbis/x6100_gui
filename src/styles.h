@@ -78,8 +78,30 @@ typedef struct {
         lv_style_t item;
         lv_style_t item_focus;
         lv_style_t item_edited;
+        lv_style_t cursor_focus;      /* LV_PART_CURSOR of a focused item */
+        lv_style_t indicator_focus;   /* LV_PART_INDICATOR of an item focused from the keypad */
+        lv_style_t text_cursor;       /* LV_PART_CURSOR of a text entry */
         lv_style_t dropdown;
+        lv_style_t dropdown_theme;    /* colors of an open dropdown list */
+        lv_style_t dropdown_selected; /* the highlighted row of an open dropdown list */
     } dialog;
+
+    /* Color-only styles for the frequency block. The widget keeps its own fonts and sizes. */
+    struct {
+        lv_style_t bg_freq;
+        lv_style_t locked;
+        lv_style_t vfo;
+        lv_style_t mode;
+    } freq;
+
+    /* Color-only styles for the ATT/PRE/NR/... indicator row over the spectrum. */
+    struct {
+        lv_style_t base;
+        lv_style_t active;
+        lv_style_t disabled;
+        lv_style_t warn;
+        lv_style_t sep;
+    } ind;
 
     struct {
         lv_style_t preview_cont;
@@ -111,8 +133,17 @@ typedef struct {
             lv_color_t peak;
         } s_meter;
 
+        struct {
+            lv_color_t pwr;
+            lv_color_t swr_ok_gray;
+            lv_color_t swr_ok;
+            lv_color_t swr_warn;
+            lv_color_t swr_bad;
+        } tx;
+
         lv_color_t mark;
         lv_color_t wf_middle_line;
+        lv_color_t freq_step_mark;
 
     } colors;
 
@@ -122,6 +153,8 @@ typedef struct {
 
 typedef struct {
     lv_color_t base_text_color;
+    /* Text drawn straight onto the spectrum or waterfall, which stay dark in every theme */
+    lv_color_t data_text_color;
 } colors_t;
 
 extern styles_t style;
@@ -158,6 +191,9 @@ void styles_init(themes_t theme);
 void styles_set_theme(themes_t theme);
 
 void styles_update_meter_colors(meter_color_t mc);
+
+/* Style the list of a dropdown made with lv_dropdown_create() for the current theme. */
+void styles_dropdown_list(lv_obj_t *list);
 
 /* Resize the panel background: updates the shared panel style geometry and
  * re-renders the pre-computed gradient bitmap for the current skin. */

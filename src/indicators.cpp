@@ -46,8 +46,6 @@ static lv_obj_t     *wifi_label;
 
 static lv_style_t ind_style;
 static lv_style_t ind_style_active;
-static lv_style_t ind_style_disabled;
-static lv_style_t atu_style_out_of_range;
 static lv_style_t ind_sep_style;  // group separator style
 
 
@@ -57,25 +55,16 @@ void indicators_init(lv_obj_t * parent, lv_coord_t h, lv_coord_t meter_w) {
     // Styles
     lv_style_init(&ind_style);
     lv_style_set_text_font(&ind_style, &sony_22);
-    lv_style_set_text_color(&ind_style, lv_color_hex(0x8A8A8A));
     lv_style_set_pad_hor(&ind_style, 5);
     lv_style_set_align(&ind_style, LV_ALIGN_CENTER);
 
+    /* Colors come from style.ind (styles.c) so they follow the theme */
     lv_style_init(&ind_style_active);
-    lv_style_set_text_color(&ind_style_active, lv_color_hex(0xFFFFFF));
-    lv_style_set_bg_color(&ind_style_active, lv_color_hex(0x12526F));
     lv_style_set_bg_opa(&ind_style_active, LV_OPA_COVER);
     lv_style_set_radius(&ind_style_active, 5);
     lv_style_set_pad_ver(&ind_style_active, 3);
 
-    lv_style_init(&ind_style_disabled);
-    lv_style_set_text_color(&ind_style_disabled, lv_color_hex(0x606060));
-
-    lv_style_init(&atu_style_out_of_range);
-    lv_style_set_text_color(&atu_style_out_of_range, lv_color_hex(0xFF9F43));
-
     lv_style_init(&ind_sep_style);
-    lv_style_set_bg_color(&ind_sep_style, lv_color_hex(0x282828));
     lv_style_set_bg_opa(&ind_sep_style, LV_OPA_COVER);
     lv_style_set_width(&ind_sep_style, SEP_WIDTH);
     lv_style_set_height(&ind_sep_style, 26);
@@ -122,8 +111,8 @@ void indicators_init(lv_obj_t * parent, lv_coord_t h, lv_coord_t meter_w) {
 
     spl_label = create_item(cont_right, "SPL");
     atu_label = create_item(cont_right, "ATU1");
-    lv_obj_add_style(atu_label, &ind_style_disabled, LV_STATE_DISABLED);
-    lv_obj_add_style(atu_label, &atu_style_out_of_range, ATU_STATE_OUT_OF_RANGE);
+    lv_obj_add_style(atu_label, &style.ind.disabled, LV_STATE_DISABLED);
+    lv_obj_add_style(atu_label, &style.ind.warn, ATU_STATE_OUT_OF_RANGE);
     create_sep(cont_right);
     rit_label = create_item(cont_right, "RIT");
     xit_label = create_item(cont_right, "XIT");
@@ -178,7 +167,9 @@ void indicators_show(bool v) {
 static lv_obj_t * create_item(lv_obj_t *parent, const char *label) {
     lv_obj_t *item = lv_label_create(parent);
     lv_obj_add_style(item, &ind_style, LV_STATE_DEFAULT);
+    lv_obj_add_style(item, &style.ind.base, LV_STATE_DEFAULT);
     lv_obj_add_style(item, &ind_style_active, LV_STATE_CHECKED);
+    lv_obj_add_style(item, &style.ind.active, LV_STATE_CHECKED);
     lv_label_set_text(item, label);
     return item;
 }
@@ -195,6 +186,7 @@ static lv_obj_t * create_sep(lv_obj_t *parent) {
     lv_obj_t *item = lv_obj_create(parent);
     lv_obj_remove_style_all(item);
     lv_obj_add_style(item, &ind_sep_style, LV_STATE_DEFAULT);
+    lv_obj_add_style(item, &style.ind.sep, LV_STATE_DEFAULT);
     return item;
 }
 

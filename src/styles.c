@@ -22,6 +22,14 @@ const uint32_t wf_palette_gauss[] = {
 #include "palettes/gauss.inc"
 };
 
+#include "theme_shadcn.h"
+
+const shadcn_theme_t *shadcn = NULL;
+
+const uint32_t wf_palette_shadcn[] = {
+#include "palettes/shadcn.inc"
+};
+
 /* Skin API */
 typedef struct {
     const uint32_t *wf_palette;
@@ -69,6 +77,9 @@ typedef struct {
         lv_coord_t    border_width;
         lv_coord_t    radius;
     } panel;
+
+    // shadcn token set, or NULL for the upstream themes
+    const shadcn_theme_t *tokens;
 } skin_t;
 
 
@@ -80,6 +91,7 @@ static uint32_t rng_state=1;
 static skin_t skin_default;
 static skin_t skin_flat;
 static skin_t skin_black;
+static skin_t skin_shadcn;
 
 static skin_t *skin_current;
 
@@ -91,8 +103,10 @@ static lv_coord_t   panel_bg_h = 182;
 static void setup_skin_default(skin_t *skin);
 static void setup_skin_flat(skin_t *skin);
 static void setup_skin_black(skin_t *skin);
+static void setup_skin_shadcn(skin_t *skin, const shadcn_theme_t *t);
 
 static void set_skin(skin_t *skin);
+static void apply_state_styles(const skin_t *skin);
 
 static void render_panel_bg(skin_t *skin, lv_coord_t w, lv_coord_t h);
 
@@ -109,8 +123,6 @@ void styles_init(themes_t theme) {
     lv_style_set_text_font(&style.freq_bounds, &mono_22);
     lv_style_set_pad_all(&style.freq_bounds, 3);
     lv_style_set_text_align(&style.freq_bounds, LV_TEXT_ALIGN_CENTER);
-    lv_style_set_bg_color(&style.freq_bounds, lv_color_black());
-    lv_style_set_bg_opa(&style.freq_bounds, LV_OPA_40);
     lv_style_set_radius(&style.freq_bounds, 5);
 
     /* Buttons */
@@ -122,30 +134,20 @@ void styles_init(themes_t theme) {
     lv_style_set_width(&style.btn.base, BTN_WIDTH);
     lv_style_set_height(&style.btn.base, BTN_HEIGHT);
 
+    /* Colors for active, disabled, and the encoder marks are set per theme in apply_state_styles() */
     lv_style_init(&style.btn.active);
-    lv_style_set_bg_img_recolor(&style.btn.active, lv_color_hex(0x00FF00));
-    lv_style_set_bg_img_recolor_opa(&style.btn.active, LV_OPA_20);
-
     lv_style_init(&style.btn.disabled);
-    lv_style_set_bg_img_recolor(&style.btn.disabled, lv_color_hex(0x000000));
-    lv_style_set_bg_img_recolor_opa(&style.btn.disabled, LV_OPA_20);
-    lv_style_set_text_color(&style.btn.disabled, lv_color_hex(0x101010));
 
     s = &style.btn.mark;
+    lv_style_init(s);
     lv_style_set_width(s, 24),
     lv_style_set_height(s, 24),
     lv_style_set_radius(s, 12);
-    lv_style_set_bg_color(s, lv_color_hex(0x808080));
-    lv_style_set_blend_mode(s, LV_BLEND_MODE_ADDITIVE);
     lv_style_set_outline_width(s, 0);
     lv_style_set_border_width(s, 2);
-    lv_style_set_border_color(s, lv_color_hex(0x909090));
-    lv_style_set_opa(s, LV_OPA_30);
 
     s = &style.btn.mark_assigned;
     lv_style_init(s);
-    lv_style_set_opa(s, LV_OPA_40);
-    lv_style_set_bg_color(s, lv_color_hex(0x80ff80));
 
     /* Message style */
     lv_style_init(&style.msg);
@@ -182,7 +184,6 @@ void styles_init(themes_t theme) {
     lv_style_set_x(&style.panels.info, 10);
     lv_style_set_y(&style.panels.info, -38);
     lv_style_set_text_font(&style.panels.info, &sony_28);
-    lv_style_set_text_color(&style.panels.info, lv_color_hex(0xaaaaaa));
 
     lv_style_init(&style.dialog.base);
     lv_style_set_text_font(&style.dialog.base, &sony_36);
@@ -198,18 +199,28 @@ void styles_init(themes_t theme) {
     lv_style_init(&style.dialog.item);
     lv_style_set_bg_opa(&style.dialog.item, LV_OPA_TRANSP);
 
+    /* Focus, edit, and cursor colors are set per theme in apply_state_styles() */
     lv_style_init(&style.dialog.item_focus);
-    lv_style_set_bg_opa(&style.dialog.item_focus, 128);
-    lv_style_set_text_color(&style.dialog.item_focus, lv_color_black());
-    lv_style_set_border_color(&style.dialog.item_focus, lv_color_white());
-    lv_style_set_border_width(&style.dialog.item_focus, 2);
-
     lv_style_init(&style.dialog.item_edited);
-    lv_style_set_bg_opa(&style.dialog.item_edited, LV_OPA_COVER);
-    lv_style_set_text_color(&style.dialog.item_edited, lv_color_black());
+    lv_style_init(&style.dialog.cursor_focus);
+    lv_style_init(&style.dialog.indicator_focus);
+    lv_style_init(&style.dialog.text_cursor);
 
     lv_style_init(&style.dialog.dropdown);
     lv_style_set_text_font(&style.dialog.dropdown, &sony_30);
+    lv_style_init(&style.dialog.dropdown_theme);
+    lv_style_init(&style.dialog.dropdown_selected);
+
+    /* Frequency block and indicator row colors, also set per theme */
+    lv_style_init(&style.freq.bg_freq);
+    lv_style_init(&style.freq.locked);
+    lv_style_init(&style.freq.vfo);
+    lv_style_init(&style.freq.mode);
+    lv_style_init(&style.ind.base);
+    lv_style_init(&style.ind.active);
+    lv_style_init(&style.ind.disabled);
+    lv_style_init(&style.ind.warn);
+    lv_style_init(&style.ind.sep);
 
     /* Waterfall elements */
     lv_style_init(&style.waterfall_middle_line);
@@ -227,9 +238,6 @@ void styles_init(themes_t theme) {
     lv_style_init(&style.knobs);
     lv_style_set_text_font(&style.knobs, &sony_24);
     lv_style_set_radius(&style.knobs, 8);
-    lv_style_set_bg_opa(&style.knobs, LV_OPA_60);
-    lv_style_set_bg_color(&style.knobs, lv_color_black());
-    lv_style_set_border_width(&style.knobs, 0);
     lv_style_set_pad_hor(&style.knobs, 5);
     lv_style_set_pad_ver(&style.knobs, 3);
 
@@ -308,8 +316,6 @@ void styles_init(themes_t theme) {
     lv_style_set_radius(&style.rgb.slider, 10);
 
     lv_style_init(&style.rgb.slider_focused);
-    lv_style_set_border_width(&style.rgb.slider_focused, 3);
-    lv_style_set_border_color(&style.rgb.slider_focused, lv_palette_main(LV_PALETTE_BLUE));
 
     lv_style_init(&style.rgb.val_label);
     lv_style_set_text_font(&style.rgb.val_label, &sony_26);
@@ -318,6 +324,7 @@ void styles_init(themes_t theme) {
     setup_skin_default(&skin_default);
     setup_skin_flat(&skin_flat);
     setup_skin_black(&skin_black);
+    /* The shadcn skin renders its bitmaps the first time it's picked, in styles_set_theme() */
 
     styles_set_theme(theme);
 
@@ -350,12 +357,30 @@ void styles_set_theme(themes_t theme) {
         case THEME_FLAT:
             skin_current = &skin_flat;
             break;
+        case THEME_SHADCN:
+        case THEME_SHADCN_LIGHT: {
+            const shadcn_theme_t *t = (theme == THEME_SHADCN_LIGHT) ? &shadcn_light : &shadcn_dark;
+            /* Dark and light share one set of bitmaps, so render them again when the variant changes */
+            if (skin_shadcn.tokens != t) {
+                setup_skin_shadcn(&skin_shadcn, t);
+            }
+            skin_current = &skin_shadcn;
+            break;
+        }
         case THEME_SIMPLE:
         default:
             skin_current = &skin_default;
             break;
         }
+        shadcn = skin_current->tokens;
         set_skin(skin_current);
+}
+
+void styles_dropdown_list(lv_obj_t *list) {
+    lv_obj_add_style(list, &style.dialog.dropdown, 0);
+    lv_obj_add_style(list, &style.dialog.dropdown_theme, 0);
+    lv_obj_add_style(list, &style.dialog.dropdown_selected, LV_PART_SELECTED | LV_STATE_CHECKED);
+    lv_obj_add_style(list, &style.dialog.dropdown_selected, LV_PART_SELECTED | LV_STATE_PRESSED);
 }
 
 static void set_spectrum_color(lv_color_t color) {
@@ -906,6 +931,309 @@ static void setup_skin_black(skin_t *skin) {
     // skin->bg_img.dialog = PATH "images/dialog_black.bin";
 }
 
+/* Render a flat, rounded background with a 1px border for one style's size.
+ * Returns NULL (and logs) when the style has no fixed size. */
+static void *render_shadcn_bg(lv_style_t *s, lv_img_dsc_t *dsc, lv_color_t fill, lv_color_t border,
+                              lv_opa_t opa, lv_coord_t radius, const char *name) {
+    lv_coord_t w, h;
+    lv_grad_dsc_t bg_grad = {
+        .dir         = LV_GRAD_DIR_VER,
+        .stops_count = 2,
+        .stops       = {[0] = {.color = fill, .frac = 0}, [1] = {.color = fill, .frac = 255}}
+    };
+    lv_grad_dsc_t border_grad = {
+        .dir         = LV_GRAD_DIR_VER,
+        .stops_count = 2,
+        .stops       = {[0] = {.color = border, .frac = 0}, [1] = {.color = border, .frac = 255}}
+    };
+
+    if (!style_get_size(s, &w, &h)) {
+        LV_LOG_ERROR("Unknown %s style size", name);
+        return NULL;
+    }
+    render_grad_bg_with_border(w, h, dsc, opa, 1, radius, &bg_grad, &border_grad);
+    return dsc;
+}
+
+/* The amber signal token is too light to read on a white card (about 2.5:1), so on
+ * a light card it's darkened 30%, which brings it to about 4.8:1 and keeps the hue.
+ * On a dark card it's used as is. */
+static lv_color_t signal_on_card(const shadcn_theme_t *t) {
+    lv_color_t c = lv_color_hex(t->signal);
+    return lv_color_brightness(lv_color_hex(t->card)) > 128 ? lv_color_darken(c, LV_OPA_30) : c;
+}
+
+/* shadcn (zinc): flat card surfaces with hairline borders and SHADCN_RADIUS corners,
+ * matching the web console. Colors come from the token set t (theme_shadcn.h).
+ *
+ * The spectrum and waterfall stay dark in both variants, because the waterfall
+ * palette is a dark ramp. So whatever is drawn straight onto them uses the dark
+ * tokens even when the light variant is picked. */
+static void setup_skin_shadcn(skin_t *skin, const shadcn_theme_t *t) {
+    static lv_img_dsc_t btn_bg_dsc;
+    static lv_img_dsc_t msg_bg_dsc;
+    static lv_img_dsc_t msg_tiny_bg_dsc;
+    static lv_img_dsc_t clock_bg_dsc;
+    static lv_img_dsc_t freq_info_bg_dsc;
+    static lv_img_dsc_t s_meter_bg_dsc;
+    static lv_img_dsc_t tx_info_bg_dsc;
+    static lv_img_dsc_t dialog_bg_dsc;
+
+    const shadcn_theme_t *d = &shadcn_dark;
+
+    lv_color_t card     = lv_color_hex(t->card);
+    lv_color_t border   = lv_color_hex(t->border);
+    lv_color_t muted_fg = lv_color_hex(t->muted_fg);
+    /* Buttons sit between the card and secondary surfaces, with a border a step
+     * toward the muted text so a row of them still reads as separate keys */
+    lv_color_t btn      = lv_color_mix(lv_color_hex(t->secondary), card, LV_OPA_50);
+    lv_color_t btn_brd  = lv_color_mix(muted_fg, border, LV_OPA_30);
+    lv_coord_t radius   = SHADCN_RADIUS;
+
+    // Copy default and override
+    *skin = skin_default;
+    skin->tokens = t;
+
+    skin->wf_palette      = wf_palette_shadcn;
+    skin->base_text_color = lv_color_hex(t->fg);
+    skin->spectrum_color  = lv_color_hex(t->wf);
+    /* Passband and band-plan fill, drawn on the dark spectrum */
+    skin->mark_color      = lv_color_mix(lv_color_hex(d->muted_fg), lv_color_hex(d->muted), LV_OPA_30);
+
+    /* The tuned frequency keeps upstream's red line, in the TX token */
+    skin->wf_middle_line_color     = lv_color_hex(t->tx);
+    skin->wf_middle_line_min_width = 2;
+
+    /* S-meter: green while it's fine, amber when strong, red when very strong */
+    skin->s_meter.noise = lv_color_mix(muted_fg, card, LV_OPA_50);
+    skin->s_meter.low   = lv_color_hex(t->rx);
+    skin->s_meter.mid   = signal_on_card(t);
+    skin->s_meter.high  = lv_color_hex(t->tx);
+    skin->s_meter.peak  = lv_color_hex(t->wf);
+
+    skin->bg_img.btn       = render_shadcn_bg(&style.btn.base, &btn_bg_dsc, btn, btn_brd, LV_OPA_COVER, radius, "btn");
+    skin->bg_img.msg       = render_shadcn_bg(&style.msg, &msg_bg_dsc, card, border, LV_OPA_90, radius, "msg");
+    skin->bg_img.msg_tiny  = render_shadcn_bg(&style.msg_tiny, &msg_tiny_bg_dsc, card, border, LV_OPA_COVER, radius, "msg_tiny");
+    skin->bg_img.clock     = render_shadcn_bg(&style.clock, &clock_bg_dsc, card, border, LV_OPA_90, radius, "clock");
+    skin->bg_img.freq_info = render_shadcn_bg(&style.freq_info, &freq_info_bg_dsc, card, border, LV_OPA_90, radius, "freq_info");
+    skin->bg_img.s_meter   = render_shadcn_bg(&style.s_meter, &s_meter_bg_dsc, card, border, LV_OPA_90, radius, "s_meter");
+    skin->bg_img.tx_info   = render_shadcn_bg(&style.tx_info, &tx_info_bg_dsc, card, border, LV_OPA_COVER, radius, "tx_info");
+    skin->bg_img.dialog    = render_shadcn_bg(&style.dialog.base, &dialog_bg_dsc, card, border, 255 * 95 / 100, radius, "dialog");
+
+    /* Panel bitmap is re-rendered on resize from these parameters. */
+    lv_grad_dsc_t panel_bg = {
+        .dir         = LV_GRAD_DIR_VER,
+        .stops_count = 2,
+        .stops       = {[0] = {.color = card, .frac = 0}, [1] = {.color = card, .frac = 255}}
+    };
+    lv_grad_dsc_t panel_border = panel_bg;
+    panel_border.stops[0].color = border;
+    panel_border.stops[1].color = border;
+    skin->panel.bg_grad      = panel_bg;
+    skin->panel.border_grad  = panel_border;
+    skin->panel.opa          = LV_OPA_90;
+    skin->panel.border_width = 1;
+    skin->panel.radius       = radius;
+}
+
+/* Focus, edit, active, and badge colors for the upstream themes. These are the
+ * values upstream hard-coded, so Simple, Black, and Flat look the way they did. */
+static void apply_upstream_states(const skin_t *skin) {
+    lv_style_set_bg_opa(&style.dialog.item_focus, 128);
+    lv_style_set_text_color(&style.dialog.item_focus, lv_color_black());
+    lv_style_set_border_color(&style.dialog.item_focus, lv_color_white());
+    lv_style_set_border_width(&style.dialog.item_focus, 2);
+
+    lv_style_set_bg_opa(&style.dialog.item_edited, LV_OPA_COVER);
+    lv_style_set_text_color(&style.dialog.item_edited, lv_color_black());
+
+    lv_style_set_text_color(&style.dialog.cursor_focus, lv_color_black());
+    lv_style_set_border_width(&style.dialog.indicator_focus, 2);
+    lv_style_set_border_color(&style.dialog.indicator_focus, lv_color_white());
+    lv_style_set_bg_color(&style.dialog.text_cursor, lv_color_white());
+    lv_style_set_bg_opa(&style.dialog.text_cursor, LV_OPA_80);
+    /* dropdown_theme and dropdown_selected stay empty, so LVGL's default theme draws the list */
+
+    lv_style_set_bg_img_recolor(&style.btn.active, lv_color_hex(0x00FF00));
+    lv_style_set_bg_img_recolor_opa(&style.btn.active, LV_OPA_20);
+    lv_style_set_bg_img_recolor(&style.btn.disabled, lv_color_hex(0x000000));
+    lv_style_set_bg_img_recolor_opa(&style.btn.disabled, LV_OPA_20);
+    lv_style_set_text_color(&style.btn.disabled, lv_color_hex(0x101010));
+
+    lv_style_set_bg_color(&style.btn.mark, lv_color_hex(0x808080));
+    lv_style_set_blend_mode(&style.btn.mark, LV_BLEND_MODE_ADDITIVE);
+    lv_style_set_border_color(&style.btn.mark, lv_color_hex(0x909090));
+    lv_style_set_opa(&style.btn.mark, LV_OPA_30);
+    lv_style_set_opa(&style.btn.mark_assigned, LV_OPA_40);
+    lv_style_set_bg_color(&style.btn.mark_assigned, lv_color_hex(0x80ff80));
+
+    lv_style_set_text_color(&style.panels.info, lv_color_hex(0xaaaaaa));
+
+    lv_style_set_bg_color(&style.knobs, lv_color_black());
+    lv_style_set_bg_opa(&style.knobs, LV_OPA_60);
+    lv_style_set_border_width(&style.knobs, 0);
+
+    lv_style_set_bg_color(&style.freq_bounds, lv_color_black());
+    lv_style_set_bg_opa(&style.freq_bounds, LV_OPA_40);
+    lv_style_set_text_color(&style.freq_bounds, lv_color_darken(skin->base_text_color, LV_OPA_30));
+
+    lv_style_set_border_width(&style.rgb.slider_focused, 3);
+    lv_style_set_border_color(&style.rgb.slider_focused, lv_palette_main(LV_PALETTE_BLUE));
+
+    lv_style_set_text_color(&style.freq.bg_freq, lv_color_hex(0xF9A851));
+    lv_style_set_text_color(&style.freq.locked, lv_color_hex(0x969696));
+    lv_style_set_bg_color(&style.freq.vfo, lv_color_hex(0xD32F2F));
+    lv_style_set_bg_opa(&style.freq.vfo, LV_OPA_70);
+    lv_style_set_bg_color(&style.freq.mode, lv_color_hex(0x4CAF50));
+    lv_style_set_bg_opa(&style.freq.mode, LV_OPA_70);
+    style.colors.freq_step_mark = lv_color_hex(0x4CAF50);
+
+    lv_style_set_text_color(&style.ind.base, lv_color_hex(0x8A8A8A));
+    lv_style_set_text_color(&style.ind.active, lv_color_hex(0xFFFFFF));
+    lv_style_set_bg_color(&style.ind.active, lv_color_hex(0x12526F));
+    lv_style_set_text_color(&style.ind.disabled, lv_color_hex(0x606060));
+    lv_style_set_text_color(&style.ind.warn, lv_color_hex(0xFF9F43));
+    lv_style_set_bg_color(&style.ind.sep, lv_color_hex(0x282828));
+
+    style.colors.tx.pwr         = lv_color_hex(0xAAAAAA);
+    style.colors.tx.swr_ok_gray = lv_color_hex(0xAAAAAA);
+    style.colors.tx.swr_ok      = lv_color_hex(0x00CC00);
+    style.colors.tx.swr_warn    = lv_color_hex(0xAAAA00);
+    style.colors.tx.swr_bad     = lv_color_hex(0xAA0000);
+
+    colors.data_text_color = skin->base_text_color;
+}
+
+/* The same states from the shadcn tokens. The radio has no touch screen, so the
+ * item that the keypad and encoders act on has to stand out from across the room.
+ *   Focused: accent fill with a 3px ring border, the shadcn focus ring made thicker.
+ *   Editing (the encoder changes the value): a solid blue fill, so it can't be
+ *   mistaken for plain focus.
+ * Things drawn on the spectrum or waterfall use the dark tokens d (see setup_skin_shadcn). */
+static void apply_shadcn_states(const shadcn_theme_t *t) {
+    const shadcn_theme_t *d = &shadcn_dark;
+
+    lv_style_set_bg_color(&style.dialog.item_focus, lv_color_hex(t->accent));
+    lv_style_set_bg_opa(&style.dialog.item_focus, LV_OPA_COVER);
+    lv_style_set_text_color(&style.dialog.item_focus, lv_color_hex(t->fg));
+    lv_style_set_border_color(&style.dialog.item_focus, lv_color_hex(t->ring));
+    lv_style_set_border_width(&style.dialog.item_focus, 3);
+
+    /* No border here, so the focus ring stays around an item while it's edited */
+    lv_style_set_bg_color(&style.dialog.item_edited, lv_color_hex(t->wf));
+    lv_style_set_bg_opa(&style.dialog.item_edited, LV_OPA_COVER);
+    lv_style_set_text_color(&style.dialog.item_edited, lv_color_hex(d->bg));
+
+    lv_style_set_text_color(&style.dialog.cursor_focus, lv_color_hex(t->fg));
+    lv_style_set_border_width(&style.dialog.indicator_focus, 2);
+    lv_style_set_border_color(&style.dialog.indicator_focus, lv_color_hex(t->ring));
+    lv_style_set_bg_color(&style.dialog.text_cursor, lv_color_hex(t->wf));
+    lv_style_set_bg_opa(&style.dialog.text_cursor, LV_OPA_60);
+
+    lv_style_set_bg_color(&style.dialog.dropdown_theme, lv_color_hex(t->card));
+    lv_style_set_bg_opa(&style.dialog.dropdown_theme, LV_OPA_COVER);
+    lv_style_set_text_color(&style.dialog.dropdown_theme, lv_color_hex(t->fg));
+    lv_style_set_border_color(&style.dialog.dropdown_theme, lv_color_hex(t->border));
+    lv_style_set_border_width(&style.dialog.dropdown_theme, 1);
+    lv_style_set_radius(&style.dialog.dropdown_theme, SHADCN_RADIUS);
+    lv_style_set_bg_color(&style.dialog.dropdown_selected, lv_color_hex(t->primary));
+    lv_style_set_bg_opa(&style.dialog.dropdown_selected, LV_OPA_COVER);
+    lv_style_set_text_color(&style.dialog.dropdown_selected, lv_color_hex(t->primary_fg));
+
+    /* A checked button gets an RX green tint and a green ring */
+    lv_style_set_bg_img_recolor(&style.btn.active, lv_color_hex(t->rx));
+    lv_style_set_bg_img_recolor_opa(&style.btn.active, LV_OPA_20);
+    lv_style_set_border_color(&style.btn.active, lv_color_hex(t->rx));
+    lv_style_set_border_width(&style.btn.active, 2);
+    lv_style_set_radius(&style.btn.active, SHADCN_RADIUS);
+    lv_style_set_bg_img_recolor(&style.btn.disabled, lv_color_hex(t->bg));
+    lv_style_set_bg_img_recolor_opa(&style.btn.disabled, LV_OPA_40);
+    lv_style_set_text_color(&style.btn.disabled, lv_color_hex(t->muted_fg));
+
+    lv_style_set_bg_color(&style.btn.mark, lv_color_hex(t->muted_fg));
+    lv_style_set_blend_mode(&style.btn.mark, LV_BLEND_MODE_NORMAL);
+    lv_style_set_border_color(&style.btn.mark, lv_color_hex(t->border));
+    lv_style_set_opa(&style.btn.mark, LV_OPA_60);
+    lv_style_set_opa(&style.btn.mark_assigned, LV_OPA_COVER);
+    lv_style_set_bg_color(&style.btn.mark_assigned, lv_color_hex(t->rx));
+
+    lv_style_set_text_color(&style.panels.info, lv_color_hex(d->muted_fg));
+
+    lv_style_set_bg_color(&style.knobs, lv_color_hex(t->card));
+    lv_style_set_bg_opa(&style.knobs, LV_OPA_90);
+    lv_style_set_border_color(&style.knobs, lv_color_hex(t->border));
+    lv_style_set_border_width(&style.knobs, 1);
+
+    lv_style_set_bg_color(&style.freq_bounds, lv_color_hex(d->card));
+    lv_style_set_bg_opa(&style.freq_bounds, LV_OPA_80);
+    lv_style_set_text_color(&style.freq_bounds, lv_color_hex(d->muted_fg));
+
+    lv_style_set_border_width(&style.rgb.slider_focused, 3);
+    lv_style_set_border_color(&style.rgb.slider_focused, lv_color_hex(t->ring));
+
+    /* Frequency block: the other VFO in amber, VFO and mode as solid badges */
+    lv_style_set_text_color(&style.freq.bg_freq, signal_on_card(t));
+    lv_style_set_text_color(&style.freq.locked, lv_color_hex(t->muted_fg));
+    lv_style_set_bg_color(&style.freq.vfo, lv_color_hex(t->tx));
+    lv_style_set_bg_opa(&style.freq.vfo, LV_OPA_COVER);
+    lv_style_set_text_color(&style.freq.vfo, lv_color_hex(t->primary_fg));
+    lv_style_set_bg_color(&style.freq.mode, lv_color_hex(t->rx));
+    lv_style_set_bg_opa(&style.freq.mode, LV_OPA_COVER);
+    lv_style_set_text_color(&style.freq.mode, lv_color_hex(t->primary_fg));
+    style.colors.freq_step_mark = lv_color_hex(t->rx);
+
+    /* Indicator row, on the spectrum: an active one is a solid light badge */
+    lv_style_set_text_color(&style.ind.base, lv_color_hex(d->muted_fg));
+    lv_style_set_text_color(&style.ind.active, lv_color_hex(d->primary_fg));
+    lv_style_set_bg_color(&style.ind.active, lv_color_hex(d->primary));
+    lv_style_set_text_color(&style.ind.disabled, lv_color_mix(lv_color_hex(d->muted_fg), lv_color_hex(d->bg), LV_OPA_50));
+    lv_style_set_text_color(&style.ind.warn, lv_color_hex(d->signal));
+    lv_style_set_bg_color(&style.ind.sep, lv_color_hex(d->border));
+
+    style.colors.tx.pwr         = lv_color_hex(t->muted_fg);
+    style.colors.tx.swr_ok_gray = lv_color_hex(t->muted_fg);
+    style.colors.tx.swr_ok      = lv_color_hex(t->rx);
+    style.colors.tx.swr_warn    = signal_on_card(t);
+    style.colors.tx.swr_bad     = lv_color_hex(t->tx);
+
+    colors.data_text_color = lv_color_hex(d->fg);
+}
+
+/* Set the focus, edit, active, and badge styles for a skin. Each style is cleared
+ * first, so a property one theme sets never stays behind after switching to another. */
+static void apply_state_styles(const skin_t *skin) {
+    lv_style_t *owned[] = {
+        &style.dialog.item_focus,
+        &style.dialog.item_edited,
+        &style.dialog.cursor_focus,
+        &style.dialog.indicator_focus,
+        &style.dialog.text_cursor,
+        &style.dialog.dropdown_theme,
+        &style.dialog.dropdown_selected,
+        &style.btn.active,
+        &style.btn.disabled,
+        &style.rgb.slider_focused,
+        &style.freq.bg_freq,
+        &style.freq.locked,
+        &style.freq.vfo,
+        &style.freq.mode,
+        &style.ind.base,
+        &style.ind.active,
+        &style.ind.disabled,
+        &style.ind.warn,
+        &style.ind.sep,
+    };
+    for (size_t i = 0; i < sizeof(owned) / sizeof(owned[0]); i++) {
+        lv_style_reset(owned[i]);
+    }
+
+    if (skin->tokens) {
+        apply_shadcn_states(skin->tokens);
+    } else {
+        apply_upstream_states(skin);
+    }
+}
+
 static void set_skin(skin_t *skin) {
     style.wf_palette = skin->wf_palette;
     style.colors.mark = skin->mark_color;
@@ -922,7 +1250,6 @@ static void set_skin(skin_t *skin) {
 
     lv_style_set_text_color(&style.text_base_color, skin->base_text_color);
     lv_style_set_text_color(&style.btn.base, skin->base_text_color);
-    lv_style_set_text_color(&style.freq_bounds, lv_color_darken(skin->base_text_color, LV_OPA_30));
     lv_style_set_text_color(&style.msg, skin->base_text_color);
     lv_style_set_text_color(&style.msg_tiny, skin->base_text_color);
     lv_style_set_text_color(&style.panels.base, skin->base_text_color);
@@ -932,8 +1259,17 @@ static void set_skin(skin_t *skin) {
     lv_style_set_text_color(&style.knobs, skin->base_text_color);
     lv_style_set_text_color(&style.rgb.letter, skin->base_text_color);
     lv_style_set_text_color(&style.rgb.val_label, skin->base_text_color);
+    /* The meters draw their scale labels in their own text color */
+    lv_style_set_text_color(&style.s_meter, skin->base_text_color);
+    lv_style_set_text_color(&style.tx_info, skin->base_text_color);
 
+    if (skin->tokens) {
+        muted_text_color = lv_color_hex(skin->tokens->muted_fg);
+    }
     lv_style_set_text_color(&style.text_muted_color, muted_text_color);
+
+    /* Focus, edit, and badge states */
+    apply_state_styles(skin);
 
     /* Spectrum */
     update_spectrum_color(skin);
@@ -969,5 +1305,7 @@ static void set_skin(skin_t *skin) {
     lv_style_set_bg_opa(&style.clock, skin->bg_color.clock.ch.alpha);
     lv_style_set_bg_color(&style.clock, skin->bg_color.clock);
 
+    /* Styles changed in place, so tell every object to refresh what it read from them */
+    lv_obj_report_style_change(NULL);
     lv_obj_invalidate(lv_scr_act());
 }

@@ -221,7 +221,7 @@ lv_obj_t *SettingsPage::dropdown_int(lv_obj_t *parent, ParamInt &param, const ch
     lv_obj_add_event_cb(obj, dropdown_update_cb, LV_EVENT_VALUE_CHANGED, setting_bind(&param, voice, extra));
 
     lv_obj_t *list = lv_dropdown_get_list(obj);
-    lv_obj_add_style(list, &style.dialog.dropdown, 0);
+    styles_dropdown_list(list);
 
     lv_dropdown_set_options(obj, options);
     lv_dropdown_set_symbol(obj, NULL);

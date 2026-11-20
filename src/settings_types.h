@@ -81,6 +81,8 @@ typedef enum {
     THEME_SIMPLE,
     THEME_BLACK,
     THEME_FLAT,
+    THEME_SHADCN,       /* shadcn dark, the default */
+    THEME_SHADCN_LIGHT, /* shadcn light, for daylight */
 } themes_t;
 
 /* Meter Color */

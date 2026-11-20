@@ -285,7 +285,7 @@ static void make_display(SettingsPage &page) {
     lv_obj_center(obj);
 
     lv_obj_t *list = lv_dropdown_get_list(obj);
-    lv_obj_add_style(list, &style.dialog.dropdown, 0);
+    styles_dropdown_list(list);
 
     lv_dropdown_set_options(obj, " Always Off \n Always On \n Temporarily On ");
     lv_dropdown_set_symbol(obj, NULL);
